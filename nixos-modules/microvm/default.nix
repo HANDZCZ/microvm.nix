@@ -5,6 +5,11 @@ let
     inherit lib;
   };
 
+  mkShortId = id: lib.pipe id [
+    (val: lib.hashString "sha256" "microvm.nix:${val}")
+    (lib.substring 0 12)
+    (val: "mv-${val}")
+  ];
 in
 
 {
@@ -15,7 +20,7 @@ in
     ./asserts.nix
     ./system.nix
     ./mounts.nix
-    ./interfaces.nix
+    (import ./interfaces.nix mkShortId)
     ./pci-devices.nix
     ./virtiofsd
     ./graphics.nix
@@ -29,7 +34,15 @@ in
     microvm.runner = lib.genAttrs microvm-lib.hypervisors (hypervisor:
       microvm-lib.buildRunner {
         inherit pkgs;
-        microvmConfig = config.microvm // {
+        microvmConfig = config.microvm
+        // {
+          interfaces = lib.map (val:
+            if lib.elem val.type [ "tap" "macvtap" ]
+              then val // { id = mkShortId val.id; }
+              else val
+          ) config.microvm.interfaces;
+        }
+        // {
           inherit (config.networking) hostName;
           inherit hypervisor;
         };
